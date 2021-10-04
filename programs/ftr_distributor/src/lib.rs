@@ -18,13 +18,13 @@ mod ftr_distributor {
         let distributor_account = &mut ctx.accounts.distributor_account;
         distributor_account.price_of_contract = price_of_contract;
         distributor_account.ftr_per_contract = ftr_per_contract;
-        distributor_account.no_of_contracts = no_of_contracts;
         distributor_account.nonce = nonce;
         distributor_account.distribution_authority = *ctx.accounts.distribution_authority.key;
         distributor_account.distributor_usdc = *ctx.accounts.distributor_usdc.to_account_info().key;
         distributor_account.distributor_ftr = *ctx.accounts.distributor_ftr.to_account_info().key;
         distributor_account.distributor_contract =
             *ctx.accounts.distributor_contract.to_account_info().key;
+        //this address will be used as seed for creating the distiributor Signer account PDA
         distributor_account.ftr_mint = ctx.accounts.distributor_ftr.mint;
 
         //Transfer Contract Tokens from creator to distributor account
@@ -59,12 +59,11 @@ mod ftr_distributor {
     pub fn distribute(ctx: Context<Distribute>, no_of_contracts_required: u64) -> ProgramResult {
         // While token::transfer will check this, we prefer a verbose err msg.
         let distributor_account = &ctx.accounts.distributor_account;
-        if distributor_account.no_of_contracts < no_of_contracts_required {
+        if ctx.accounts.distributor_contract.amount < no_of_contracts_required {
             return Err(ErrorCode::InSufficientNoOfContracts.into());
         }
         let amount_in_usdc = distributor_account.price_of_contract * no_of_contracts_required;
         let amount_in_ftr = distributor_account.ftr_per_contract * no_of_contracts_required;
-        // distributor_account.no_of_contracts += no_of_contracts_required;
         // Transfer user's USDC to distributor USDC account.
         let cpi_accounts = Transfer {
             from: ctx.accounts.user_usdc.to_account_info(),
@@ -104,12 +103,10 @@ mod ftr_distributor {
     }
 
     pub fn redeem(ctx: Context<Redeem>, no_of_contracts_redeemed: u64) -> ProgramResult {
-        // While token::transfer will check this, we prefer a verbose err msg.
         let distributor_account = &ctx.accounts.distributor_account;
 
         let amount_in_usdc = distributor_account.price_of_contract * no_of_contracts_redeemed;
         let amount_in_ftr = distributor_account.ftr_per_contract * no_of_contracts_redeemed;
-        // distributor_account.no_of_contracts -= no_of_contracts_redeemed;
         // Transfer user's contract token to distributor contract account.
         let cpi_accounts = Transfer {
             from: ctx.accounts.user_contract.to_account_info(),
@@ -158,11 +155,11 @@ mod ftr_distributor {
         amount_of_usdc_to_withdraw: Option<u64>,
         amount_of_ftr_to_withdraw: Option<u64>,
     ) -> ProgramResult {
-        let distributor_account = &ctx.accounts.distributor_account;
 
         //for withdrawal of contracts
         if let Some(no_of_contracts_to_withdraw) = no_of_contracts_to_withdraw {
-            if no_of_contracts_to_withdraw > distributor_account.no_of_contracts {
+            // While token::transfer will check this, we prefer a verbose err msg.
+            if no_of_contracts_to_withdraw > ctx.accounts.distributor_contract.amount {
                 return Err(ErrorCode::InSufficientNoOfContracts.into()); 
             }
             let seeds = &[
@@ -182,6 +179,7 @@ mod ftr_distributor {
 
         //for withdrawal of usdc
         if let Some(amount_of_usdc_to_withdraw) = amount_of_usdc_to_withdraw {
+            // While token::transfer will check this, we prefer a verbose err msg.
             if amount_of_usdc_to_withdraw > ctx.accounts.distributor_usdc.amount {
                 return Err(ErrorCode::InSufficientAmountOfUsdc.into()); 
             };
@@ -202,6 +200,7 @@ mod ftr_distributor {
 
         //for withdrawal of ftr
         if let Some(amount_of_ftr_to_withdraw) = amount_of_ftr_to_withdraw {
+            // While token::transfer will check this, we prefer a verbose err msg.
             if amount_of_ftr_to_withdraw > ctx.accounts.distributor_ftr.amount {
                 return Err(ErrorCode::InSufficientAmountOfFtr.into()); 
             }
@@ -229,8 +228,6 @@ pub struct InitializeDistributor<'info> {
     #[account(zero)]
     pub distributor_account: Box<Account<'info, DistributorAccount>>,
     pub distributor_signer: AccountInfo<'info>,
-    // #[account(constraint = usdc_mint.decimals == redeemable_mint.decimals)]
-    // pub usdc_mint: Account<'info, Mint>,
     #[account(constraint = distributor_ftr.owner == *distributor_signer.key)]
     pub distributor_ftr: Account<'info, TokenAccount>,
     #[account(constraint = distributor_usdc.owner == *distributor_signer.key)]
@@ -348,17 +345,10 @@ pub struct BackdoorWithdraw<'info> {
     pub token_program: AccountInfo<'info>,
 }
 
-// #[derive(Accounts)]
-// pub struct UpdateDistributor<'info> {
-//     #[account(mut)]
-//     pub distributor_account: Account<'info, DistributorAccount>,
-// }
-
 #[account]
 pub struct DistributorAccount {
     pub price_of_contract: u64,
     pub ftr_per_contract: u64,
-    pub no_of_contracts: u64,
     pub nonce: u8,
     pub distribution_authority: Pubkey,
     pub distributor_usdc: Pubkey,
