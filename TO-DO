@@ -1,0 +1,18 @@
+//DONE
+1.Initialize ContractAccount with 
+    No of Contracts:
+    Price of Contract:
+    No of FTR required for each contract:
+
+2.Provide function/backdoor to do
+    i.Withdraw FTR, USDC, unbought Contract tokens
+    //DONE
+    ii.Update price of contract and no of FTR required
+
+//DONE
+3.Allow user to deposit USDC and FTR 
+    and send back corresponding no of contract tokens
+
+//DONE
+4.Allow user to redeem back contract for USDC and FTR
+
