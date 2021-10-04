@@ -120,21 +120,21 @@ describe('ftr_distributor', () => {
           distributionAuthority: provider.wallet.publicKey,
         },
       }
-      );
-      distributor_account = await program.account.distributorAccount.fetch(distributorAccount.publicKey);
-      assert(distributor_account.priceOfContract.eq(priceOfContract));
-      assert(distributor_account.ftrPerContract.eq(ftrPerContract));
-    });
-    
-    const userUsdcBalance = new anchor.BN(1500);
-    const userFtrBalance = new anchor.BN(25);
+    );
+    distributor_account = await program.account.distributorAccount.fetch(distributorAccount.publicKey);
+    assert(distributor_account.priceOfContract.eq(priceOfContract));
+    assert(distributor_account.ftrPerContract.eq(ftrPerContract));
+  });
 
-    it("Deposit USDC,FTR and get back Contract Tokens", async () => {
-      const noOfContractsRequired = new anchor.BN(4);
-      const amountInUsdcRequired = new anchor.BN(1000);
-      const amountInFtrRequired = new anchor.BN(4);
-      
-      // Total 100 - 10(after this rpc call) = 90
+  const userUsdcBalance = new anchor.BN(1500);
+  const userFtrBalance = new anchor.BN(25);
+
+  it("Deposit USDC,FTR and get back Contract Tokens", async () => {
+    const noOfContractsRequired = new anchor.BN(4);
+    const amountInUsdcRequired = new anchor.BN(1000);
+    const amountInFtrRequired = new anchor.BN(4);
+
+    // Total 100 - 10(after this rpc call) = 90
     userUsdc = await createTokenAccount(
       provider,
       usdcMint,
@@ -190,40 +190,71 @@ describe('ftr_distributor', () => {
   });
 
   it("Redeem Contract tokens and get back USDC,FTR", async () => {
-    const noOfContractsRedeemed = new anchor.BN(4);
-    const amountInUsdcRequired = new anchor.BN(1000);
-    const amountInFtrRequired = new anchor.BN(4);
+    const noOfContractsRedeemed = new anchor.BN(2);
+    const amountInUsdcRequired = new anchor.BN(500);
+    const amountInFtrRequired = new anchor.BN(2);
 
-  await program.rpc.redeem(noOfContractsRedeemed,
-    {
-      accounts: {
-        distributorAccount: distributorAccount.publicKey,
-        distributorSigner,
-        distributorUsdc,
-        distributorFtr,
-        distributorContract,
-        userAuthority: provider.wallet.publicKey,
-        userUsdc,
-        userFtr,
-        userContract,
-        tokenProgram: TOKEN_PROGRAM_ID,
+    await program.rpc.redeem(noOfContractsRedeemed,
+      {
+        accounts: {
+          distributorAccount: distributorAccount.publicKey,
+          distributorSigner,
+          distributorUsdc,
+          distributorFtr,
+          distributorContract,
+          userAuthority: provider.wallet.publicKey,
+          userUsdc,
+          userFtr,
+          userContract,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        },
+      }
+    );
+    //Substract no of contracts distributed from the total 
+    totalNoOfContractsInDistributor = totalNoOfContractsInDistributor.add(noOfContractsRedeemed);
+    distributorUsdcAccount = await getTokenAccount(provider, distributorUsdc);
+    assert.ok(distributorUsdcAccount.amount.eq(new anchor.BN(500)));
+    distributorFtrAccount = await getTokenAccount(provider, distributorFtr);
+    assert.ok(distributorFtrAccount.amount.eq(new anchor.BN(2)));
+    distributorContractAccount = await getTokenAccount(provider, distributorContract);
+    assert.ok(distributorContractAccount.amount.eq(totalNoOfContractsInDistributor));
+  });
+
+  it("Backdoor withdraw USDC,FTR and Contract", async () => {
+    noOfContractsToWithdraw = new anchor.BN(8);
+    amountOfUsdcToWithdraw = new anchor.BN(100);
+    amountOfFtrToWithdraw = new anchor.BN(1);
+    await program.rpc.backdoorWithdraw(
+      noOfContractsToWithdraw,
+      amountOfUsdcToWithdraw,
+      amountOfFtrToWithdraw,
+      {
+        accounts: {
+          distributorAccount: distributorAccount.publicKey,
+          distributionAuthority: provider.wallet.publicKey,
+          distributorSigner,
+          distributorUsdc,
+          distributorFtr,
+          distributorContract,
+          creatorUsdc: userUsdc,
+          creatorFtr: userFtr,
+          creatorContract: creatorContract,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        }
       },
-    }
-  );
-  //Substract no of contracts distributed from the total 
-  totalNoOfContractsInDistributor = totalNoOfContractsInDistributor.add(noOfContractsRedeemed);
-  distributorUsdcAccount = await getTokenAccount(provider, distributorUsdc);
-  assert.ok(distributorUsdcAccount.amount.eq(new anchor.BN(0)));
-  distributorFtrAccount = await getTokenAccount(provider, distributorFtr);
-  assert.ok(distributorFtrAccount.amount.eq(new anchor.BN(0)));
-  distributorContractAccount = await getTokenAccount(provider, distributorContract);
-  assert.ok(distributorContractAccount.amount.eq(totalNoOfContractsInDistributor));
-  userUsdcWallet = await getTokenAccount(provider, userUsdc);
-  assert.ok(userUsdcWallet.amount.eq(userUsdcBalance));
-  userFtrWallet = await getTokenAccount(provider, userFtr);
-  assert.ok(userFtrWallet.amount.eq(userFtrBalance));
-  userContractWallet = await getTokenAccount(provider, userContract);
-  assert.ok(userContractWallet.amount.eq(new anchor.BN(0)));
-  debugger;
-})
+
+    );
+    totalNoOfContractsInDistributor = totalNoOfContractsInDistributor.sub(noOfContractsToWithdraw);
+    distributorContractAccount = await getTokenAccount(provider, distributorContract);
+    assert.ok(distributorContractAccount.amount.eq(totalNoOfContractsInDistributor));
+    distributorUsdcAccount = await getTokenAccount(provider, distributorUsdc);
+    assert.ok(distributorUsdcAccount.amount.eq(new anchor.BN(400)));
+    distributorFtrAccount = await getTokenAccount(provider, distributorFtr);
+    assert.ok(distributorFtrAccount.amount.eq(new anchor.BN(1)));
+    creators_contract_account = await getTokenAccount(
+      provider,
+      creatorContract,
+    );
+    assert.ok(creators_contract_account.amount.eq(new anchor.BN(8)))
+  });
 });
